@@ -1,0 +1,286 @@
+---
+title: "Ordering vertices"
+author: Hernán Ibarra
+date: 'May 2021'
+numbersections: TRUE
+output: pdf_document
+fig_width: 3 
+fig_height: 2
+
+---
+
+```{r, echo=FALSE}
+knitr::opts_chunk$set(fig.width=4, fig.height=3,fig.align="center") 
+```
+
+Here is the outline of how to inductively order all the vertices.
+
+Base case: Start out at some vertex $V_1$.
+
+Hypothesis: Suppose we have joined $j$ vertices $V_1,\ldots,V_j$ with non-intersecting line segments
+
+Inductive step: Pick one vertex $V_{j+1}$ that isn't joined to anything (if there aren't any then we are done). Check if  the line segment $\overline{V_jV_{j+1}}$ intersects any of our previous line segments, i.e. $\overline{V_1V_2},\overline{V_2V_3},\ldots,\overline{V_{j-1}V_j}$. If it doesn't intersect any of them then we have joined $j+1$ vertices with non-intersecting line segments. If it intersects at least one of them then try another $V_{j+1}$ until it doesn't intersect anything.
+
+And eventually we join all the vertices with non-intersecting line segments, i.e. we draw a polygon, no? Unfortunately there are many caveats. 
+
+First of all, we may be doing fine, joining $V_1,\ldots,V_j$ successfully, until we reach a dead end: there is no way to add another vertex without intersecting our current line segments (we can't find a $V_{j+1}$). Then what we need to do is back up: choosing $V_j$ was a mistake so we try to find another vertex to find its place, the requirement being that it doesn't result in intersecting line segments. If we can find one then continue as normal and try to find $V_{j+1}$; if we can't find anything then choosing $V_{j-1}$ was a mistake, so try to find a replacement, and so on.
+
+And there are infinitely many small things that make the code complex (most of which are explained in the comments), yet this is the main idea of what the code does. First, we need a function to help us tell whether two line segments intersect Roughly speaking, if two lines passing through $(x_1,y_1)$,$(x_2,y_2)$, and $(x_3,y_3)$,$(x_4,y_4)$ respectively meet at a point $(x,y)$ then it's pretty easy to show that we must have
+\[
+\begin{pmatrix}
+y_2-y_1 & x_1-x_2\\
+y_4-y_3&x_3-x_4
+\end{pmatrix}
+\begin{pmatrix}
+x \\
+y
+\end{pmatrix}
+=
+\begin{pmatrix}
+x_1(y_2-y_1) + y_1(x_1-x_2)\\
+x_3(y_4-y_3)+y_3(x_3-x_4)
+\end{pmatrix}
+\]
+using just the equations of the lines. We write this in the code as $A\overline{x} = B$. Then we need to check that the point of intersection actually lies in both line segments. Another thing to note is that if $det(A) = 0$ then the equation has no solutions or infinitely many, i.e. the lines are parallel. Details are included in the Rmd file, here we just take the following functions as granted.
+
+
+```{r, echo = FALSE}
+#This function takes two line segments and checks if they intersect (line segments are given as 
+#a two by two matrix with the coordinates of the two points defining the segment)
+#The optional argument endpoints just determines whether if the two line segments intersect 
+#but only at one of their endpoints (like a chain) we count that as an intersection. Sometimes 
+#it's useful to disregard this case, but the default is we count it as a genuine intersection.
+inters_line_seg <- function(l1,l2, endpoints = TRUE){
+  
+  #l1 is the line between (x1,y1) and (x2,y2)
+  x1 <- l1[1,1]
+  y1 <- l1[1,2]
+  
+  x2 <- l1[2,1]
+  y2 <- l1[2,2]
+  
+  #l2 is the line between (x3,y3) and (x4,y4)
+  x3 <- l2[1,1]
+  y3 <- l2[1,2]
+  
+  x4 <- l2[2,1]
+  y4 <- l2[2,2]
+  
+  
+  A <- matrix(data = c(y2-y1,y4-y3,x1-x2,x3-x4),nrow = 2,ncol = 2)
+  
+  B <- c(x1*(y2-y1) + y1*(x1-x2),x3*(y4-y3)+y3*(x3-x4))
+  
+  
+  if(det(A) == 0) #then the lines are parallel
+  {
+    #these are the constant terms in the eq of l1 and l2
+    b1 <- y1 -x1*(y2-y1)/(x2-x1) 
+    b2 <- y3 -x3*(y4-y3)/(x4-x3)
+    
+    if(b1 == b2) #then the line segments lie in the same line
+    {
+      
+      #this checks if the line segments intersect, given they are in the same line
+      if((min(x3,x4) <= max(x1,x2) && max(x1,x2) <= max(x3,x4)) || (min(x1,x2) <= max(x3,x4) && max(x3,x4) <= max(x1,x2)))
+      {
+        #if endpoints do not count
+        if(!endpoints)
+        {
+          #we check if they intersect at endpoints
+          if(max(x1,x2) == min(x3,x4) || min(x1,x2) == max(x3,x4))
+          {
+            return(FALSE)
+          }
+        }
+        
+        return(TRUE)
+      }
+      else
+      {
+        return(FALSE)
+      }
+    }
+    else
+    {
+      return(FALSE)
+    }
+  }
+  else # if det A != 0
+  {
+    xbar <- solve(A,B) #Solve A(xbar) = B
+    
+    x <- xbar[1]
+    y <- xbar[2]
+    
+    inlinex <-  max(min(x1,x2),min(x3,x4)) <= x && x <= min(max(x1,x2),max(x3,x4))
+    inliney <-  max(min(y1,y2),min(y3,y4)) <= y && y <= min(max(y1,y2),max(y3,y4))
+    
+    if(inlinex && inliney)#if the point of intersection lies on both line segments
+    {
+      #if endpoints do not count
+      if(!endpoints)
+        {
+          #and the point of intersection is an endpoint of the two lines
+          if((xbar == l1[1,]|| xbar == l1[2,]) && (xbar == l2[1,] || xbar == l2[2,]))
+          {
+            return(FALSE)
+          }
+        }
+      return(TRUE)
+    }
+    else
+    {
+      return(FALSE)
+    }
+  }
+}
+
+#this function takes one line segment and a matrix of points. It checks whether the line segment intersects any of the line segments produced by joining the points of the matrix in order (so for example if could check whether V_jV{j+1} intersects with any of V_1V_2, V_2,V3,..., V_{j-1}V_j)
+inters_many_line_seg <- function(l,ls, endpnt = TRUE){
+  #As ls is a two column matrix, this will give how many coordinates ls has
+  n<-length(ls)/2
+  
+  if(n <= 1)
+  {
+    return(FALSE)
+  }
+  
+  for(i in 1:(n-1))
+  {
+    #the endpoints optional argument is set to FALSE only if endpnt is set to FALSE or if i = n-1.
+    #We want to set it to false when i =n-1 because when we are checking if V_{j-1}V_j and V_jV{j+1}  intersect for example  they of course are going to intersect at one endpoint but in this case we want to check for a genuine intersection.
+    if(inters_line_seg(ls[c(i,i+1),], l, endpoints = endpnt &&(i != n-1)))
+    {
+      return(TRUE)
+    }
+  }
+  return(FALSE)
+}
+
+```
+
+```{r, eval=FALSE}
+#This function takes two line segments and checks if they intersect (line segments are given as 
+#a two by two matrix with the coordinates of the two points defining the segment)
+#The optional argument endpoints just determines whether if the two line segments intersect 
+#but only at one of their endpoints (like a chain) we count that as an intersection. Sometimes 
+#it's useful to disregard this case, but the default is we count it as a genuine intersection.
+inters_line_seg<- function(l1,l2, endpoints = TRUE){...}
+
+```
+Then we use the above to build the following function.
+
+```{r,eval=FALSE}
+#this function takes one line segment and a matrix of points. It checks 
+#whether the line segment intersects any of the line segments produced 
+#by joining the points of the matrix in order (so for example if could check 
+#whether V_jV{j+1} intersects with any of V_1V_2, V_2,V3,..., V_{j-1}V_j)
+inters_many_line_seg <- function(l,ls, endpnt = TRUE){...}
+```
+
+
+Now we can finally write the code that orders vertices. 
+
+```{r}
+#This function takes two matrices: ord_list is the candidate vertices we have thus far,
+#in order, and remain are the points that we haven't yet ordered. This function outputs
+#a list with two elements: "found" tells us if the search was successful and "newlist"
+#gives us the new ordered list, having incorporated all elements of remain, if possible
+search_nxt_vertex <- function(remain, ord_list){
+  #As remain is a two column matrix, this will give how many coordinates it has
+  n <- length(remain)/2
+  
+  #if remain is the empty list then we have ordered all the points
+  if(n == 0)
+  {
+    return(list(found = TRUE, newlist = ord_list))
+  }
+  else
+  {
+    #sometimes when remain has only one coordinate
+    #it turns into a vector, so we keep it a matrix manually (who would've thought)
+    if (n == 1)
+    {
+      remain <- matrix(data = remain, nrow = 1, ncol = 2)
+    }
+    
+    #for each point in remain
+    for (c in 1:n) 
+    {
+      #this if statement makes sure we don't check the last element of remain until remain 
+      #has length 1. We do this because we plan to have the last element of remain
+      #be the first vertex (to "close" the polygon), and we want to check it last
+      if (c == n && n != 1)
+      {
+        next
+      }
+      
+      #we check if joining the last element of ord_list
+      #with that point in remain is a possible ordering
+      possible_edge <- rbind(ord_list[length(ord_list)/2,], remain[c,])
+      
+      #if this new edge doesn't intersect the previous ones
+      if(!inters_many_line_seg(possible_edge,ord_list, n!=1))
+      {
+        #then we add this point to ord_list, remove it from remain, and call the function again
+        nxt<- search_nxt_vertex(remain[-c,],rbind(ord_list, remain[c,]))
+        
+        #if this process yielded an ordered list
+        if(nxt$found)
+        {
+          #we return it
+          return(list(found = TRUE, newlist = nxt$newlist))
+        }
+      }
+      #otherwise the for loop kicks in and we keep searching
+    }
+    #if the for loop ends and we didn't find anything
+    return(list(found = FALSE, newlist = ord_list))
+  }
+}
+
+#this function takes in a matrix of points, and returns a new matrix with the same points,
+#but ordered into a polygon
+order_vertices <- function(m){
+  n <- length(m)/2 # how many coordinates are there
+  
+  if (n < 3) #we need at least a triangle for a polygon
+  {
+    return(NULL)
+  }
+  
+  #puts the first row last, to "close" the polygon in the end
+  m_new <- rbind(m[-1,],m[1,]) 
+  
+  #our starting vertex v_1, turned into a matrix
+  first_coordinate <- matrix(data = m[1,], nrow = 1, ncol = 2)
+  
+  ord <- search_nxt_vertex(m_new,first_coordinate)
+
+  if(ord$found)
+  {
+    #it's going to have the extra coordinate we used to "close" the polygon, so we remove it
+    return(ord$newlist[-n-1,])
+  }
+  else
+  {
+    return(NULL)
+  }
+}
+
+aRandomPolygon <- rbind(c(5,2.5),c(6,3.5),c(7.5,1),c(10,4),c(12.5,1.5),c(9.5,0.5))
+
+(anOrderedPolygon <- order_vertices(aRandomPolygon))
+
+
+```
+
+And it indeed works (we can close the polygon with a bit more effort too). Neat.
+
+```{r}
+plot(anOrderedPolygon[,1],anOrderedPolygon[,2], pch = 19, col = "blue", xlab = '', ylab = '') 
+    lines(x = anOrderedPolygon[,1],y=anOrderedPolygon[,2],col = "red")
+```
+
+
