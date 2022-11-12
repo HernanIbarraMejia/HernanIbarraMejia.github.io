@@ -1,4 +1,20 @@
-  .edinburgh {
+h1 {
+    text-align: center
+}
+
+h2 {
+
+}  
+
+address{
+    font-style: normal
+}
+
+#edinburgh {
       width: 300px;
       height: 400px;
+    display: block;
+      margin-left: auto;
+    margin-right: auto;
+    
     }
